@@ -4,10 +4,13 @@ version = "0.1.0"
 description = ""
 authors = ["Swapnil Shinde <swapnilshinde9382@gmail.com>"]
 readme = "README.md"
+packages = [{ include = "p3ai_agent" }]  # 👈 Add this line
 
 [tool.poetry.dependencies]
 python = "^3.12"
-
+langchain = "^0.3.22"
+langchain-core = "^0.3.49"
+langchain-openai = "^0.3.11"
 
 [build-system]
 requires = ["poetry-core"]
