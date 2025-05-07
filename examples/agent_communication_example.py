@@ -1,13 +1,16 @@
 from p3ai_agent.communication import MQTTAgentWrapper
+from langchain_openai import ChatOpenAI
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import AgentExecutor, create_openai_functions_agent
+from rich.console import Console
+
+console = Console()
 
 if __name__ == "__main__":
 
-    from langchain_openai import ChatOpenAI
-    from langchain.memory import ConversationBufferMemory
-    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-    from langchain.agents import AgentExecutor, create_openai_functions_agent
     
-    mqtt_wrapper = MQTTAgentWrapper(client_id="my_agent")
+    mqtt_wrapper = MQTTAgentWrapper(client_id="agenta")
     
     tools = mqtt_wrapper.get_tools()
     
@@ -43,4 +46,4 @@ if __name__ == "__main__":
         if user_input.lower() == "exit":
             break
         result = agent_executor.invoke({"input": user_input})
-        print(f"Agent Response: {result['output']}")
+        console.print(f"Agent Response: {result['output']}", style="bold green")
