@@ -38,7 +38,7 @@ class MQTTAgentWrapper:
     Users only need to pass their agent executor that will use the MQTT tools provided by this wrapper.
     """
     
-    def __init__(self, client_id: str = "mqtt_agent", listen_on_topic: str = "collaborate"):
+    def __init__(self, client_id: str, listen_on_topic: str = "collaborate"):
         """
         Initialize the MQTT wrapper.
         
@@ -77,11 +77,22 @@ class MQTTAgentWrapper:
 
     def _auto_respond(self, incoming_message):
         """Automatically respond to incoming message using the agent."""
-        if self.agent_executor:
-            response = self.agent_executor.invoke({"input": f"craft a good reply to this incoming agent message and dont forget to use necessary tool for extra tool calling, after crafting reply you have to send the message to mqtt, only give reply of the message provided and nothing else: {incoming_message}"})
-            self.console.print(f"Auto-processed with response: {response['output']}\n", style="yellow")
-        else:
-            self.console.print(f"Agent executor not set, cannot auto-respond\n", style="bold red")
+        try:
+            if self.agent_executor:
+                # Create a more specific prompt for the agent
+                prompt = (
+                    f"An incoming message has been received: '{incoming_message}'\n"
+                    f"Craft a response to this message using the agent's capabilities and tools provided and send a reply using send_message_tool.\n"
+                    f"Make sure your response is appropriate for the message content.",
+                    "Make sure to check if the collaborator topic is correct before sending message"
+
+                )
+                print(self.collaborator_topic, "topic")
+                self.agent_executor.invoke({"input": prompt})
+            else:
+                self.console.print("Agent executor not set, cannot auto-respond\n", style="bold red")
+        except Exception as e:
+            self.console.print(f"Error in auto-response: {str(e)}\n", style="bold red")
 
     def _on_connect(self, client, userdata, flags, rc):
         """Callback when the MQTT client successfully connects."""
@@ -141,6 +152,7 @@ class MQTTAgentWrapper:
         self.mqtt_client.publish(self.collaborator_topic, message, qos=1)
         self.console.print(f"Sent message to topic '{self.collaborator_topic}': {message}\n", style="yellow")
 
+        return message
 
     def read_messages(self) -> str:
         """Read messages received from the MQTT broker."""
