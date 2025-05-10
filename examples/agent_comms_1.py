@@ -7,7 +7,7 @@ import time
 
 if __name__ == "__main__":
     
-    agent_comms = AgentCommunicationManager(agent_id="agent_b")
+    agent_comms = AgentCommunicationManager(agent_id="agent_a")
     tools = agent_comms.get_available_tools()
 
     llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
@@ -37,10 +37,10 @@ if __name__ == "__main__":
 
     
     # Subscribe to another agent's topic
-    agent_comms._subscribe_to_topic("agent_b/inbox")
+    agent_comms._subscribe_to_topic("agent_a/inbox")
     
     # Change outbox topic to communicate with agent_b
-    agent_comms._change_outbox_topic("agent_a/inbox")
+    agent_comms._change_outbox_topic("agent_b/inbox")
     
     # Send a test message
     agent_comms.send_message("Hello from agent_a! How are you?")

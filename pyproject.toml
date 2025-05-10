@@ -11,7 +11,6 @@ python = "^3.12"
 langchain = "^0.3.22"
 langchain-core = "^0.3.49"
 langchain-openai = "^0.3.11"
-rich = "^14.0.0"
 
 [build-system]
 requires = ["poetry-core"]
