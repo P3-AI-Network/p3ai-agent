@@ -55,12 +55,11 @@ class SearchAndDiscoveryManager:
             logger.error(f"Failed to discover agents: {resp.status_code} - {resp.text}")
             return []
         
-    def _create_agent_tools(self) -> List[StructuredTool]:
+    
+    def get_available_tools(self) -> List[StructuredTool]:
         """
-        Create LangChain tools for agent discovery.
-        
-        These tools are used to interact with the P3AI agent registry and perform searches.
-        
+        Get the tools for agent discovery.  
+        This method is used to retrieve the tools that can be used for agent discovery.
         Returns:
             List of StructuredTool objects
         """
@@ -80,15 +79,6 @@ class SearchAndDiscoveryManager:
         )
         return [agent_discovery_tool]
     
-    def get_available_tools(self) -> List[StructuredTool]:
-        """
-        Get the tools for agent discovery.  
-        This method is used to retrieve the tools that can be used for agent discovery.
-        Returns:
-            List of StructuredTool objects
-        """
-        return self._create_agent_tools()
-    
 
     def set_agent_executor(self, agent_executor) -> None:
         """
@@ -100,9 +90,3 @@ class SearchAndDiscoveryManager:
         self.agent_executor = agent_executor
         logger.info("Agent executor configured for automatic responses")
     
-
-if __name__ == "__main__":
-
-    search_and_discovery = SearchAndDiscovery()
-    agents = search_and_discovery.discover_agents(["story-teller"])
-    print(agents)
