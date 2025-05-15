@@ -43,7 +43,7 @@ if __name__ == "__main__":
     agent_comms._change_outbox_topic("agent_a/inbox")
     
     # Send a test message
-    agent_comms.send_message("Hello from agent_a! How are you?")
+    # agent_comms.send_message("Hello from agent_a! How are you?")
     
     # Example of custom error handling for OpenAI message format issues 
     def safe_message_handler(message, topic):

@@ -7,7 +7,6 @@ from langchain.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 
-# Configure logging with a more descriptive format
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -26,7 +25,7 @@ class DiscoverAgentsInput(BaseModel):
         description="List of capabilities to search for. Example: ['story-teller']"
     )
 
-class SearchAndDiscovery:
+class SearchAndDiscoveryManager:
     """
     This class implements the search and discovery protocol for P3AI agents.
     It allows agents to discover each other and share information about their capabilities.
@@ -103,7 +102,7 @@ class SearchAndDiscovery:
     
 
 if __name__ == "__main__":
-    # Example usage
+
     search_and_discovery = SearchAndDiscovery()
     agents = search_and_discovery.discover_agents(["story-teller"])
     print(agents)

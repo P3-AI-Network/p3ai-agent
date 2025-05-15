@@ -1,4 +1,4 @@
-from p3ai_agent.search import SearchAndDiscoveryManager
+from p3ai_agent.identity import IdentityManager
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -7,14 +7,17 @@ import time
     
 
 if __name__ == "__main__":
-    agent_search = SearchAndDiscoveryManager()
-    tools = agent_search.get_available_tools()
+    agent_identity = IdentityManager(sdk_url="http://localhost:3002/sdk/search")
+    tools = agent_identity.get_available_tools()
+
+    my_did = agent_identity.get_my_did()
+    print(f"My DID: {my_did}")
 
     llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", """You're an AI assistant, you have to use the tools given for every user question. to search for approaiate capabilities needed, make capabilities less than 2"""),
+        ("system", """You're an AI assistant, you have to use the tools given for every user question. You can verify any identity document by using the given tools."""),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
@@ -30,7 +33,7 @@ if __name__ == "__main__":
         handle_parsing_errors=True,
     )
 
-    agent_search.set_agent_executor(agent_executor)
+    agent_identity.set_agent_executor(agent_executor)
 
 
     while True:

@@ -102,14 +102,14 @@ class MQTTMessage:
             return cls.from_dict(data)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse message as JSON: {e}")
-            # Fallback for plain text messages
+
             return cls(
                 content=json_str,
                 sender_id="unknown",
                 message_type="raw"
             )
 
-# Pydantic schemas for tool inputs
+
 class MQTTBrokerConnectionInput(BaseModel):
     broker_url: str = Field(
         description="The URL of the MQTT broker (format: mqtt://hostname:port)"
@@ -128,7 +128,6 @@ class MQTTMessageInput(BaseModel):
         description="Specific recipient ID (leave empty for broadcast)"
     )
     
-    # Alias for compatibility with the error in the traceback
     @property
     def message(self):
         """Alias for message_content to maintain compatibility with existing code"""
@@ -165,31 +164,31 @@ class AgentCommunicationManager:
             auto_reconnect: Whether to attempt reconnection on failure
             message_history_limit: Maximum number of messages to keep in history
         """
-        # Agent identification and configuration
+
         self.agent_id = agent_id
         self.inbox_topic = default_inbox_topic or f"{agent_id}/inbox"
         self.outbox_topic = default_outbox_topic or f"agents/collaboration"
         self.auto_reconnect = auto_reconnect
         self.message_history_limit = message_history_limit
         
-        # Communication state
+
         self.is_connected = False
         self.subscribed_topics = set()
         self.received_messages = []
         self.message_history = []
-        self.pending_responses = {}  # Track messages awaiting replies
+        self.pending_responses = {} 
         
-        # LangChain integration
+
         self.agent_executor = None
         self.message_handlers = []
         
-        # MQTT client setup
+
         self.mqtt_client = mqtt.Client(client_id=self.agent_id)
         self.mqtt_client.on_connect = self._handle_connect
         self.mqtt_client.on_message = self._handle_message
         self.mqtt_client.on_disconnect = self._handle_disconnect
         
-        # Create tools for LangChain integration
+
         self.available_tools = self._create_agent_tools()
         
         logger.info(f"Agent '{self.agent_id}' communication manager initialized")
@@ -197,18 +196,18 @@ class AgentCommunicationManager:
     def _handle_message(self, client, userdata, mqtt_message):
         """Handle incoming MQTT messages and process them appropriately."""
         try:
-            # Extract message content
+
             payload = mqtt_message.payload.decode('utf-8')
             topic = mqtt_message.topic
             
             logger.info(f"[{self.agent_id}] Received message on topic '{topic}'")
             
-            # Try to parse as structured message
+
             try:
                 message = MQTTMessage.from_json(payload)
                 structured = True
             except Exception:
-                # Handle as raw text if not JSON
+
                 message = MQTTMessage(
                     content=payload,
                     sender_id="unknown",
@@ -217,7 +216,7 @@ class AgentCommunicationManager:
                 )
                 structured = False
             
-            # Store in message queues with topic information
+
             message_with_metadata = {
                 "message": message,
                 "topic": topic,
@@ -225,15 +224,15 @@ class AgentCommunicationManager:
                 "structured": structured
             }
             
-            # Add to active messages and history
+
             self.received_messages.append(message_with_metadata)
             self.message_history.append(message_with_metadata)
             
-            # Limit history size
+
             if len(self.message_history) > self.message_history_limit:
                 self.message_history = self.message_history[-self.message_history_limit:]
             
-            # Trigger automatic response if agent executor is configured
+
             if self.agent_executor:
                 print("Preparing response...")
                 threading.Thread(
@@ -241,7 +240,7 @@ class AgentCommunicationManager:
                     args=(message, topic)
                 ).start()
                 
-            # Run any custom message handlers
+
             for handler in self.message_handlers:
                 try:
                     handler(message, topic)
@@ -258,13 +257,13 @@ class AgentCommunicationManager:
                 logger.warning("No agent executor configured for auto-response")
                 return
                 
-            # Extract message details for context
+
             sender = incoming_message.sender_id
             content = incoming_message.content
             msg_type = incoming_message.message_type
             msg_id = incoming_message.message_id
             
-            # Create prompt with context
+
             prompt = (
                 f"A new message has arrived from {sender} on topic {source_topic}:\n\n"
                 f"CONTENT: {content}\n"
@@ -274,9 +273,9 @@ class AgentCommunicationManager:
                 f"Remember to check if the outbox topic is correctly set to reach the sender."
             )
             
-            # Format message for safe API compatibility
+
             try:
-                # Execute the agent with this prompt, handling OpenAI message format requirements
+
                 self.agent_executor.invoke({
                     "input": prompt,
                     "message_context": {
@@ -286,10 +285,10 @@ class AgentCommunicationManager:
                     }
                 })
             except Exception as api_error:
-                # Check for the specific OpenAI format error
+
                 if "expected an object, but got a string instead" in str(api_error):
                     logger.warning("Detected OpenAI message format error, attempting with formatted content")
-                    # Try again with properly formatted content
+
                     self.agent_executor.invoke({
                         "input": {"type": "text", "text": prompt},
                         "message_context": {
@@ -299,7 +298,7 @@ class AgentCommunicationManager:
                         }
                     })
                 else:
-                    # Re-raise if it's not the format error we're handling
+
                     raise
             
         except Exception as e:
@@ -311,13 +310,13 @@ class AgentCommunicationManager:
             self.is_connected = True
             logger.info(f"[{self.agent_id}] Connected to MQTT broker successfully")
             
-            # Subscribe to the agent's inbox topic automatically
+
             self._subscribe_to_topic(self.inbox_topic)
             logger.info(f"[{self.agent_id}] Listening for messages on {self.inbox_topic}")
             
-            # Resubscribe to any previously subscribed topics
+
             for topic in self.subscribed_topics:
-                if topic != self.inbox_topic:  # Already subscribed to inbox
+                if topic != self.inbox_topic:
                     client.subscribe(topic, qos=1)
                     logger.info(f"[{self.agent_id}] Resubscribed to {topic}")
         else:
@@ -337,7 +336,7 @@ class AgentCommunicationManager:
         self.is_connected = False
         logger.warning(f"[{self.agent_id}] Disconnected from MQTT broker, code {rc}")
         
-        # Auto-reconnect if enabled
+
         if self.auto_reconnect:
             logger.info(f"[{self.agent_id}] Attempting to reconnect...")
             try:
@@ -359,9 +358,9 @@ class AgentCommunicationManager:
             return f"Already connected to MQTT broker as '{self.agent_id}'"
             
         try:
-            # Parse the broker URL
+
             if broker_url.startswith("mqtt://"):
-                broker_url = broker_url[7:]  # Remove mqtt:// prefix
+                broker_url = broker_url[7:] 
                 
             # Extract host and port
             if ":" in broker_url:
@@ -375,7 +374,7 @@ class AgentCommunicationManager:
             self.mqtt_client.connect(host, port)
             self.mqtt_client.loop_start()
             
-            # Wait briefly for the connection to establish
+
             connection_timeout = 3  # seconds
             start_time = time.time()
             while not self.is_connected and time.time() - start_time < connection_timeout:
