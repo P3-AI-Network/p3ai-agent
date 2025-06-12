@@ -25,16 +25,15 @@ if __name__ == "__main__":
     
     p3_agent = P3AIAgent(agent_config=agent_config)
 
-    print(p3_agent.identity_credential)
 
-    # agent_executor = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
-    # memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    agent_executor = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 
-    # p3_agent.set_agent_executor(agent_executor)
+    p3_agent.set_agent_executor(agent_executor)
     
-    # # agents = p3_agent.search_agents_by_capabilities(["nlp"])
-    # # print(f"Agents discovered: {agents}")
+    agents = p3_agent.search_agents_by_capabilities(["nlp"])
+    print(f"Agents discovered: {agents}")
 
 
     # p3_agent.load_did("examples/agent-did.json")
@@ -47,8 +46,8 @@ if __name__ == "__main__":
     # print(f"Agent verified: {is_verified}")
 
     # result = p3_agent.connect_to_broker("mqtt://localhost:1883")
-    # p3_agent._subscribe_to_topic("agent_a/inbox")
-    # p3_agent._change_outbox_topic("agent_b/inbox")
+    # p3_agent._subscribe_to_topic(f"{p3_agent.agent_id}/inbox")
+    # p3_agent._change_outbox_topic(f"{agents[0]}/inbox")
 
 
     # def recieve_messages(p3_agent: P3AIAgent):
