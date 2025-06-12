@@ -2,28 +2,15 @@
 import logging
 import requests
 
-from typing import List
-from langchain.tools import StructuredTool
-from pydantic import BaseModel, Field
+from typing import List, Optional
 
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("SearchAndDiscovery")
 
-class DiscoverAgentsInput(BaseModel):
-    """
-    Input schema for the discover_agents function.
-    This class defines the
-    input parameters for the discover_agents function.
-    """
-
-    capabilities: List[str] = Field(
-        default=[],
-        description="List of capabilities to search for. Example: ['story-teller']"
-    )
 
 class SearchAndDiscoveryManager:
     """
@@ -35,58 +22,33 @@ class SearchAndDiscoveryManager:
 
         self.agents = []
         self.registry_url = registry_url
-        self.agent_executor = None
 
 
-    def discover_agents(self, capabilities: List[str] = []):
+    def search_agents_by_capabilities(self, capabilities: List[str] = [], match_score_gte: float = 0.5, top_k: Optional[int] = None) -> List[dict]:
         """
         Discover all registered agents in the system based on their capabilities.
+
+        match_score_gte: Minimum match score for agents to be included in the results.
+        top_k: Optional parameter to limit the number of results returned or return all.
         """
 
         logger.info("Discovering agents...")
 
 
-        resp = requests.post(self.registry_url, json={"userProvidedCapabilities": capabilities})
+        resp = requests.post(f"{self.registry_url}/sdk/search", json={"userProvidedCapabilities": capabilities})
         if resp.status_code == 201:
             agents = resp.json()
             logger.info(f"Discovered {len(agents)} agents.")
-            return agents
+
+            filtered_agents = [
+                agent for agent in agents
+                if agent.get("matchScore", 0) >= match_score_gte
+            ]
+
+            if top_k is not None:
+                filtered_agents = filtered_agents[:top_k]
+
+            return filtered_agents
         else:
             logger.error(f"Failed to discover agents: {resp.status_code} - {resp.text}")
             return []
-        
-    
-    def get_available_tools(self) -> List[StructuredTool]:
-        """
-        Get the tools for agent discovery.  
-        This method is used to retrieve the tools that can be used for agent discovery.
-        Returns:
-            List of StructuredTool objects
-        """
-
-        agent_discovery_tool = StructuredTool.from_function(
-            func=lambda capabilities: self.discover_agents(capabilities),
-            name="agent_discovery",
-            description="""
-                Discover agents based on their capabilities.
-                capabilities: List of capabilities to search for.
-                Returns a list of agents that match the capabilities.
-                Example: discover_agents(["story-teller"])
-                Returns: List of agents that match the capabilities.
-            """,
-            args_schema=DiscoverAgentsInput,
-            return_direct=False
-        )
-        return [agent_discovery_tool]
-    
-
-    def set_agent_executor(self, agent_executor) -> None:
-        """
-        Set the agent executor for automatic message processing.
-        
-        Args:
-            agent_executor: LangChain agent executor to handle messages
-        """
-        self.agent_executor = agent_executor
-        logger.info("Agent executor configured for automatic responses")
-    

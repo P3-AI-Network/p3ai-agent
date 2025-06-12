@@ -3,81 +3,88 @@ from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import AgentExecutor, create_openai_functions_agent
+from dotenv import load_dotenv
+import json 
+import threading
+import time
+
+load_dotenv()
+
 
 if __name__ == "__main__":
 
     agent_config = AgentConfig(
-        agent_id="agent_a",
         default_inbox_topic="agent_a/inbox",
         default_outbox_topic=None,
         auto_reconnect=True,
         message_history_limit=100,
-        registry_url="http://localhost:3002/sdk/search",
-        mqtt_broker_url="mqtt://localhost:1883"
+        registry_url="http://localhost:3002",
+        mqtt_broker_url="mqtt://localhost:1883",
+        identity_credential_path = "/Users/swapnilshinde/Desktop/p3ai/p3ai-agent/examples/identity_credential.json"
     )
     
     p3_agent = P3AIAgent(agent_config=agent_config)
-    tools = p3_agent.get_available_tools()
 
-    for tool in tools:
-        print(f"Tool: {tool.name}")
+    print(p3_agent.identity_credential)
 
-    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-    
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", """
-            You're an AI assistant.
-            You have list of tools which can help you in finding agents and commuinicating with them.
-            Your approach for a answer which is complex and will require external agents to be involed, 
-            you have to first use search and discovery tools and then use mqtt tools to connect to the broker and topic 
-            and then send message to other agent saying "change outbox topic to <your_client_id>/inbox" and then start sending messages.
-         
-            *Note*: You can use as many tools as you want to communicate and collaborate and yoy should always do agent_discovery before connecting to any mqtt
-        """),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-        MessagesPlaceholder(variable_name="agent_scratchpad"),
-    ])
-    
-    agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=prompt)
-    
-    agent_executor = AgentExecutor(
-        agent=agent,
-        tools=tools,
-        memory=memory,
-        verbose=True,
-        handle_parsing_errors=True,
-    )
+    # agent_executor = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+    # memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-    p3_agent.set_agent_executor(agent_executor)
+
+    # p3_agent.set_agent_executor(agent_executor)
     
-    # Example of custom error handling for OpenAI message format issues 
-    def safe_message_handler(message, topic):
-        """Handle messages with additional OpenAI format error protection"""
-        try:
-            print(f"Received message: {message.content} on {topic}")
-            
-            # If using with LangChain + OpenAI, properly format the message
-            if p3_agent.agent_executor:
-                try:
-                    # First try normal format
-                    p3_agent.agent_executor.invoke({
-                        "input": f"Respond to: {message.content}"
-                    })
-                except Exception as e:
-                    if "expected an object, but got a string instead" in str(e):
-                        # Try with properly formatted content for multimodal models
-                        p3_agent.agent_executor.invoke({
-                            "input": {"type": "text", "text": f"Respond to: {message.content}"}
-                        })
-                    else:
-                        raise
-        except Exception as e:
-            print(f"Error in message handler: {e}")
+    # # agents = p3_agent.search_agents_by_capabilities(["nlp"])
+    # # print(f"Agents discovered: {agents}")
+
+
+    # p3_agent.load_did("examples/agent-did.json")
+    # my_did = json.dumps(p3_agent.AGENT_DID)
+
+    # is_verified = p3_agent.verify_agent_identity(my_did)
+
+
+
+    # print(f"Agent verified: {is_verified}")
+
+    # result = p3_agent.connect_to_broker("mqtt://localhost:1883")
+    # p3_agent._subscribe_to_topic("agent_a/inbox")
+    # p3_agent._change_outbox_topic("agent_b/inbox")
+
+
+    # def recieve_messages(p3_agent: P3AIAgent):
+
+    #     while True:
+
+    #         if len(p3_agent.received_messages): 
+                
+    #             for message in p3_agent.read_messages:
+    #                 print("Recieved Message: ",message)
+
+
+    #             p3_agent.received_messages = []
+
+    #         time.sleep(1)
+
+    # def ask_questions(p3_agent: P3AIAgent):
+
+    #     while True:
+
+    #         user_input = input("Question: ")
+    #         result = agent_executor.invoke({"input": user_input})
+
+    #         p3_agent.send_message(result, "query")
+
+    # thread = threading.Thread(target=recieve_messages, args=[p3_agent])
+    # thread2 = threading.Thread(target=ask_questions, args=[p3_agent])
+
+    # thread.start()
+    # thread2.start()
+
+    # thread.join()
+    # thread2.join()
+
+
         
-    # Add our safe message handler
-    p3_agent.add_message_handler(safe_message_handler)
-    
 
-    p3_agent.run()
+
+

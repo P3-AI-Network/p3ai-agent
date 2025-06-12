@@ -110,34 +110,6 @@ class MQTTMessage:
             )
 
 
-class MQTTBrokerConnectionInput(BaseModel):
-    broker_url: str = Field(
-        description="The URL of the MQTT broker (format: mqtt://hostname:port)"
-    )
-
-class MQTTMessageInput(BaseModel):
-    message_content: str = Field(
-        description="The content of the message to send"
-    )
-    message_type: str = Field(
-        default="query", 
-        description="Message type (query, response, broadcast, system)"
-    )
-    receiver_id: Optional[str] = Field(
-        default=None,
-        description="Specific recipient ID (leave empty for broadcast)"
-    )
-    
-    @property
-    def message(self):
-        """Alias for message_content to maintain compatibility with existing code"""
-        return self.message_content
-    
-class MQTTTopicInput(BaseModel):
-    topic_name: str = Field(
-        description="The MQTT topic name (e.g., 'agents/collaboration')"
-    )
-
 class AgentCommunicationManager:
     """
     MQTT-based communication manager for LangChain agents.
@@ -178,8 +150,6 @@ class AgentCommunicationManager:
         self.message_history = []
         self.pending_responses = {} 
         
-
-        self.agent_executor = None
         self.message_handlers = []
         
 
@@ -188,12 +158,8 @@ class AgentCommunicationManager:
         self.mqtt_client.on_message = self._handle_message
         self.mqtt_client.on_disconnect = self._handle_disconnect
         
-
-        self.available_tools = self._create_agent_tools()
-        
-        logger.info(f"Agent '{self.agent_id}' communication manager initialized")
     
-    def _handle_message(self, client, userdata, mqtt_message):
+    def _handle_message(self, client, userdata, mqtt_message: MQTTMessage):
         """Handle incoming MQTT messages and process them appropriately."""
         try:
 
@@ -250,59 +216,6 @@ class AgentCommunicationManager:
         except Exception as e:
             logger.error(f"Error processing incoming message: {e}")
 
-    def _generate_response(self, incoming_message, source_topic):
-        """Generate an automatic response using the configured agent executor."""
-        try:
-            if not self.agent_executor:
-                logger.warning("No agent executor configured for auto-response")
-                return
-                
-
-            sender = incoming_message.sender_id
-            content = incoming_message.content
-            msg_type = incoming_message.message_type
-            msg_id = incoming_message.message_id
-            
-
-            prompt = (
-                f"A new message has arrived from {sender} on topic {source_topic}:\n\n"
-                f"CONTENT: {content}\n"
-                f"MESSAGE TYPE: {msg_type}\n\n"
-                f"Consider the context and formulate an appropriate response.\n"
-                f"Use the send_mqtt_message tool to reply if needed.\n\n"
-                f"Remember to check if the outbox topic is correctly set to reach the sender."
-            )
-            
-
-            try:
-
-                self.agent_executor.invoke({
-                    "input": prompt,
-                    "message_context": {
-                        "original_message": incoming_message.to_dict(),
-                        "source_topic": source_topic,
-                        "in_reply_to": msg_id
-                    }
-                })
-            except Exception as api_error:
-
-                if "expected an object, but got a string instead" in str(api_error):
-                    logger.warning("Detected OpenAI message format error, attempting with formatted content")
-
-                    self.agent_executor.invoke({
-                        "input": {"type": "text", "text": prompt},
-                        "message_context": {
-                            "original_message": incoming_message.to_dict(),
-                            "source_topic": source_topic,
-                            "in_reply_to": msg_id
-                        }
-                    })
-                else:
-
-                    raise
-            
-        except Exception as e:
-            logger.error(f"Error generating automatic response: {e}")
 
     def _handle_connect(self, client, userdata, flags, rc):
         """Handle successful connection to MQTT broker."""
@@ -569,120 +482,6 @@ class AgentCommunicationManager:
         logger.info(f"[{self.agent_id}] Changed outbox topic from '{previous_topic}' to '{topic_name}'")
         return f"Changed outbox topic to '{topic_name}'"
     
-    def _create_agent_tools(self) -> List[StructuredTool]:
-        """
-        Create LangChain tools for agent communication.
-        
-        These tools allow LangChain agents to interact with the MQTT network.
-        
-        Returns:
-            List of StructuredTool objects
-        """
-        # Connection management tools
-        connect_tool = StructuredTool.from_function(
-            name="connect_to_mqtt_broker",
-            func=lambda broker_url: self.connect_to_broker(broker_url),
-            description="""
-            Connect to an MQTT broker to enable communication with other agents.
-            The broker_url should be in the format: mqtt://hostname:port
-            Example: connect_to_mqtt_broker("mqtt://localhost:1883")
-            """,
-            args_schema=MQTTBrokerConnectionInput,
-            return_direct=False,
-        )
-        
-        disconnect_tool = StructuredTool.from_function(
-            name="disconnect_from_mqtt_broker",
-            func=lambda: self.disconnect_from_broker(),
-            description="""
-            Disconnect from the current MQTT broker and clean up resources.
-            Use this when you're finished communicating with other agents.
-            Example: disconnect_from_mqtt_broker()
-            """,
-            return_direct=False,
-        )
-        
-        # Messaging tools
-        send_message_tool = StructuredTool.from_function(
-            name="send_mqtt_message",
-            func=lambda message_content, message_type="query", receiver_id=None: 
-                self.send_message(message_content, message_type, receiver_id),
-            description="""
-            Send a message to other agents via the current outbox topic.
-            Specify the message content, type, and optional specific recipient.
-            Example: send_mqtt_message("Hello, this is Agent X!", "query", "agent_y")
-            """,
-            args_schema=MQTTMessageInput,
-            return_direct=True,  # Changed to True for better agent feedback
-        )
-        
-        read_messages_tool = StructuredTool.from_function(
-            name="read_mqtt_messages",
-            func=lambda: self.read_messages(),
-            description="""
-            Read all messages received from subscribed topics.
-            This will clear the message queue after reading.
-            Example: read_mqtt_messages()
-            """,
-            return_direct=False,
-        )
-        
-        # Topic management tools
-        subscribe_tool = StructuredTool.from_function(
-            name="subscribe_to_mqtt_topic",
-            func=lambda topic_name: self._subscribe_to_topic(topic_name),
-            description="""
-            Subscribe to receive messages from a specific MQTT topic.
-            Example: subscribe_to_mqtt_topic("agents/announcements")
-            """,
-            args_schema=MQTTTopicInput,
-            return_direct=False,
-        )
-        
-        unsubscribe_tool = StructuredTool.from_function(
-            name="unsubscribe_from_mqtt_topic",
-            func=lambda topic_name: self._unsubscribe_from_topic(topic_name),
-            description="""
-            Stop receiving messages from a specific MQTT topic.
-            Cannot unsubscribe from your primary inbox topic.
-            Example: unsubscribe_from_mqtt_topic("agents/announcements")
-            """,
-            args_schema=MQTTTopicInput,
-            return_direct=False,
-        )
-        
-        change_outbox_tool = StructuredTool.from_function(
-            name="change_mqtt_outbox_topic",
-            func=lambda topic_name: self._change_outbox_topic(topic_name),
-            description="""
-            Change the topic where your outgoing messages are published.
-            Use this when you want to communicate with a specific agent or group.
-            Example: change_mqtt_outbox_topic("agent_y/inbox")
-            """,
-            args_schema=MQTTTopicInput,
-            return_direct=False,
-        )
-                
-        return [
-            connect_tool,
-            disconnect_tool, 
-            send_message_tool, 
-            read_messages_tool, 
-            subscribe_tool, 
-            unsubscribe_tool, 
-            change_outbox_tool
-        ]
-
-    def set_agent_executor(self, agent_executor) -> None:
-        """
-        Set the agent executor for automatic message processing.
-        
-        Args:
-            agent_executor: LangChain agent executor to handle messages
-        """
-        self.agent_executor = agent_executor
-        logger.info(f"[{self.agent_id}] Agent executor configured for automatic responses")
-
     def add_message_handler(self, handler_function: Callable) -> None:
         """
         Add a custom message handler function.
@@ -693,15 +492,6 @@ class AgentCommunicationManager:
         """
         self.message_handlers.append(handler_function)
         logger.info(f"[{self.agent_id}] Added custom message handler")
-
-    def get_available_tools(self) -> List[StructuredTool]:
-        """
-        Get all available communication tools for use with a LangChain agent.
-        
-        Returns:
-            List of StructuredTool objects
-        """
-        return self.available_tools
         
     def get_connection_status(self) -> Dict[str, Any]:
         """
@@ -742,58 +532,3 @@ class AgentCommunicationManager:
             history = history[-limit:]
             
         return history
-
-# Example usage
-if __name__ == "__main__":
-    # Create an agent communication manager
-    agent_comms = AgentCommunicationManager(agent_id="agent_a")
-    
-    # Connect to a broker
-    status = agent_comms.connect_to_broker("mqtt://localhost:1883")
-    print(status)
-    
-    # Subscribe to another agent's topic
-    agent_comms._subscribe_to_topic("agent_b/inbox")
-    
-    # Change outbox topic to communicate with agent_b
-    agent_comms._change_outbox_topic("agent_b/inbox")
-    
-    # Send a test message
-    agent_comms.send_message("Hello from agent_a! How are you?")
-    
-    # Example of custom error handling for OpenAI message format issues 
-    def safe_message_handler(message, topic):
-        """Handle messages with additional OpenAI format error protection"""
-        try:
-            print(f"Received message: {message.content} on {topic}")
-            
-            # If using with LangChain + OpenAI, properly format the message
-            if agent_comms.agent_executor:
-                try:
-                    # First try normal format
-                    agent_comms.agent_executor.invoke({
-                        "input": f"Respond to: {message.content}"
-                    })
-                except Exception as e:
-                    if "expected an object, but got a string instead" in str(e):
-                        # Try with properly formatted content for multimodal models
-                        agent_comms.agent_executor.invoke({
-                            "input": {"type": "text", "text": f"Respond to: {message.content}"}
-                        })
-                    else:
-                        raise
-        except Exception as e:
-            print(f"Error in message handler: {e}")
-        
-    # Add our safe message handler
-    agent_comms.add_message_handler(safe_message_handler)
-    
-    # Keep the example running to demonstrate
-    try:
-        print("Agent is running. Press Ctrl+C to exit...")
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Shutting down agent...")
-    finally:
-        agent_comms.disconnect_from_broker()
