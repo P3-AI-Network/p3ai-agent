@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "p3ai-agent"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Langchain and Autogen wrapper that enables agents to communicate and establish identity on the P3 AI Network. This SDK provides three core capabilities: Identity Management, Agent Discovery & Search, and MQTT-based Communication."
 authors = ["Swapnil Shinde <swapnilshinde9382@gmail.com>"]
 readme = "README.md"
