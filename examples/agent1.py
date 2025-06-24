@@ -50,12 +50,6 @@ if __name__ == "__main__":
     agent_executor = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-    def handle_incoming_message(client, userdata, msg):
-        message = p3_agent.decrypt_message(msg, p3_agent.secret_seed)
-        print(f"Message: {message}")
-
-    p3_agent.mqtt_client.on_message = handle_incoming_message
-
     p3_agent.set_agent_executor(agent_executor)
 
 

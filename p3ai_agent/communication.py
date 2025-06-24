@@ -29,12 +29,13 @@ class MQTTMessage:
         self,
         content: str,
         sender_id: str,
+        sender_did: dict = None,
         receiver_id: Optional[str] = None,
         message_type: str = "query",
         message_id: Optional[str] = None,
         conversation_id: Optional[str] = None,
         in_reply_to: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):  
         """
         Initialize a new MQTT message.
@@ -52,6 +53,7 @@ class MQTTMessage:
         self.content = content
         self.sender_id = sender_id
         self.receiver_id = receiver_id
+        self.sender_did = sender_did
         self.message_type = message_type
         self.message_id = message_id or str(uuid.uuid4())
         self.conversation_id = conversation_id or str(uuid.uuid4())
@@ -64,6 +66,7 @@ class MQTTMessage:
         return {
             "content": self.content,
             "sender_id": self.sender_id,
+            "sender_did": self.sender_did,
             "receiver_id": self.receiver_id,
             "message_type": self.message_type,
             "message_id": self.message_id,
@@ -83,6 +86,7 @@ class MQTTMessage:
         return cls(
             content=data.get("content", ""),
             sender_id=data.get("sender_id", "unknown"),
+            sender_did=data.get("sender_did", "unknown"),
             receiver_id=data.get("receiver_id"),
             message_type=data.get("message_type", "query"),
             message_id=data.get("message_id"),
@@ -156,6 +160,7 @@ class AgentCommunicationManager:
         
 
         self.is_connected = False
+        self.is_agent_connected = False
         self.subscribed_topics = set()
         self.received_messages = []
         self.message_history = []
@@ -168,7 +173,8 @@ class AgentCommunicationManager:
         self.mqtt_client.on_connect = self._handle_connect
         self.mqtt_client.on_message = self._handle_message
         self.mqtt_client.on_disconnect = self._handle_disconnect
-        
+        self.default_mqtt_broker_url = mqtt_broker_url
+
         self.connect_to_broker(mqtt_broker_url)
         self.subscribe_to_topic(f"{self.agent_id}/inbox")
         print("Agent connected to broker")
@@ -177,61 +183,60 @@ class AgentCommunicationManager:
     
     def _handle_message(self, client, userdata, mqtt_message: MQTTMessage):
         """Handle incoming MQTT messages and process them appropriately."""
-        try:
+        # try:
 
-            payload = json.loads(mqtt_message.payload.decode('utf-8'))
-            decrypt_payload = decrypt_message(payload, self.secret_seed, self.identity_credential)
-            topic = mqtt_message.topic
-            
-            logger.info(f"[{self.agent_id}] Received message on topic '{topic}'")
+        payload = json.loads(mqtt_message.payload.decode('utf-8'))
+        decrypt_payload = decrypt_message(payload, self.secret_seed, self.identity_credential)
+        topic = mqtt_message.topic
+        
+        logger.info(f"[{self.agent_id}] Received message on topic '{topic}'")
+        
+
+
+        message = MQTTMessage.from_json(decrypt_payload)
+
+        if not self.is_agent_connected:
+            self.connect_agent({
+                "mqttUri": self.default_mqtt_broker_url,
+                "didIdentifier": message.sender_id,
+                "did": json.dumps(message.sender_did)
+            })
+
+        structured = True
+
+        message_with_metadata = {
+            "message": message,
+            "topic": topic,
+            "received_at": time.time(),
+            "structured": structured
+        }
+        
+        print("\nIncoming Message: ", message.content, "\n")
+
+        self.received_messages.append(message_with_metadata)
+        self.message_history.append(message_with_metadata)
+        
+
+        if len(self.message_history) > self.message_history_limit:
+            self.message_history = self.message_history[-self.message_history_limit:]
+        
+
+        # if self.agent_executor:
+        #     print("Preparing response...")
+        #     threading.Thread(
+        #         target=self._generate_response,
+        #         args=(message, topic)
+        #     ).start()
             
 
+        for handler in self.message_handlers:
             try:
-                message = MQTTMessage.from_json(decrypt_payload)
-                structured = True
-            except Exception:
-
-                message = MQTTMessage(
-                    content=decrypt_payload,
-                    sender_id=self.identity_credential_connected_agent["issuer"],
-                    receiver_id=self.agent_id,
-                    message_type="raw"
-                )
-                structured = False
-            
-            message_with_metadata = {
-                "message": message,
-                "topic": topic,
-                "received_at": time.time(),
-                "structured": structured
-            }
-            
-            print("\nIncoming Message: ", message.content, "\n")
-
-            self.received_messages.append(message_with_metadata)
-            self.message_history.append(message_with_metadata)
-            
-
-            if len(self.message_history) > self.message_history_limit:
-                self.message_history = self.message_history[-self.message_history_limit:]
-            
-
-            # if self.agent_executor:
-            #     print("Preparing response...")
-            #     threading.Thread(
-            #         target=self._generate_response,
-            #         args=(message, topic)
-            #     ).start()
-                
-
-            for handler in self.message_handlers:
-                try:
-                    handler(message, topic)
-                except Exception as e:
-                    logger.error(f"Error in custom message handler: {e}")
+                handler(message, topic)
+            except Exception as e:
+                logger.error(f"Error in custom message handler: {e}")
                     
-        except Exception as e:
-            logger.error(f"Error processing incoming message: {e}")
+        # except Exception as e:
+        #     logger.error(f"Error processing incoming message: {e}")
 
 
     def _handle_connect(self, client, userdata, flags, rc):
@@ -361,7 +366,8 @@ class AgentCommunicationManager:
                 content=message_content,
                 sender_id=self.agent_id,
                 receiver_id=receiver_id,
-                message_type=message_type
+                message_type=message_type,
+                sender_did=self.identity_credential
             )
             
             # Convert to JSON, encrypt and publish
@@ -555,4 +561,4 @@ class AgentCommunicationManager:
         self.connect_to_broker(agent["mqttUri"])
         self.change_outbox_topic(f"{agent["didIdentifier"]}/inbox")
         self.identity_credential_connected_agent = json.loads(agent["did"])
-
+        self.is_agent_connected = True

@@ -53,39 +53,13 @@ if __name__ == "__main__":
     p3_agent.set_agent_executor(agent_executor)
 
 
-    # Main loop
+
+
     while True:
-        search_filter = input("Search Agent: ")
-        agents = p3_agent.search_agents_by_capabilities([search_filter])
+        message = input("Message (Exit for exit): ")
 
-        print("Agents Found")
-        for agent in agents:
-            print(f"""
-                DID: {agent["didIdentifier"]}
-                Description: {agent["description"]}
-                Match Score: {agent["matchScore"]}
-            """)
-            print("================")
+        if message == "Exit":
+            break
         
-        agent_select = input("Connect to agent DID: ")
-
-        selected_agent = None
-        for agent in agents:
-            if agent["didIdentifier"] == agent_select:
-                selected_agent = agent
-        
-        if not selected_agent:
-            raise "Invalid did agent not found"
-        
-        p3_agent.connect_agent(selected_agent)
-
-        print("Connected to agent")
-
-        while True:
-            message = input("Message (Exit for exit): ")
-
-            if message == "Exit":
-                break
-            
-            p3_agent.send_message(message)
-        
+        p3_agent.send_message(message)
+    
