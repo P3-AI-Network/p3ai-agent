@@ -5,7 +5,6 @@ from p3ai_agent.communication import AgentCommunicationManager
 from pydantic import BaseModel
 from typing import Optional
 
-
 class AgentConfig(BaseModel):
     auto_reconnect: bool = True
     message_history_limit: int = 100
@@ -13,12 +12,10 @@ class AgentConfig(BaseModel):
     mqtt_broker_url: str
     identity_credential_path: str
     identity_credential: Optional[dict] = None
-    default_inbox_topic: Optional[str] = None
     default_outbox_topic: Optional[str] = None
+    secret_seed: str = None
 
 class P3AIAgent(SearchAndDiscoveryManager, IdentityManager, AgentCommunicationManager):
-    
-    identity_credential: Optional[dict] = None
 
     def __init__(self, agent_config: AgentConfig): 
 
@@ -34,14 +31,17 @@ class P3AIAgent(SearchAndDiscoveryManager, IdentityManager, AgentCommunicationMa
             self,
             registry_url=agent_config.registry_url
         )
-
+        
         AgentCommunicationManager.__init__(
             self,
-            self.identity_credential["vc"]["credentialSubject"]["id"],
-            default_inbox_topic=agent_config.default_inbox_topic,
+            self.identity_credential["issuer"],
+            default_inbox_topic=f"{self.identity_credential['issuer']}/inbox",
             default_outbox_topic=agent_config.default_outbox_topic,
             auto_reconnect=True,
-            message_history_limit=agent_config.message_history_limit
+            message_history_limit=agent_config.message_history_limit,
+            identity_credential=self.identity_credential,
+            secret_seed=agent_config.secret_seed,
+            mqtt_broker_url=agent_config.mqtt_broker_url
         )
 
         self.agent_executor = None
@@ -49,5 +49,4 @@ class P3AIAgent(SearchAndDiscoveryManager, IdentityManager, AgentCommunicationMa
 
     def set_agent_executor(self, agent_executor):
         """Set the agent executor for the agent."""
-
-        self.agent_executor = agent_executor
+        self.agent_executor = agent_executor 

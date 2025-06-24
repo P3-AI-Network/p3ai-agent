@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "p3ai-agent"
-version = "0.1.0"
-description = ""
+version = "0.1.1"
+description = "A Langchain and Autogen wrapper that enables agents to communicate and establish identity on the P3 AI Network. This SDK provides three core capabilities: Identity Management, Agent Discovery & Search, and MQTT-based Communication."
 authors = ["Swapnil Shinde <swapnilshinde9382@gmail.com>"]
 readme = "README.md"
 packages = [{ include = "p3ai_agent" }]  # 👈 Add this line
@@ -13,6 +13,7 @@ langchain-core = "^0.3.49"
 langchain-openai = "^0.3.11"
 paho-mqtt = "^2.1.0"
 base58 = "^2.1.1"
+cryptography = "^45.0.4"
 
 [build-system]
 requires = ["poetry-core"]

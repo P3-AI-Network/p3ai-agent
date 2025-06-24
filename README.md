@@ -143,7 +143,7 @@ messages = p3_agent.read_messages()
 print(messages)
 
 # Subscribe to additional topics
-p3_agent._subscribe_to_topic("global_announcements")
+p3_agent.subscribe_to_topic("global_announcements")
 ```
 
 ## Complete Example

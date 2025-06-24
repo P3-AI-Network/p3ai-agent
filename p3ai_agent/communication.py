@@ -2,11 +2,12 @@ import threading
 import time
 import json 
 import logging
-from typing import List, Callable, Optional, Dict, Any, Union
 import uuid
 import paho.mqtt.client as mqtt
-from langchain.tools import StructuredTool
-from pydantic import BaseModel, Field
+
+from p3ai_agent.utils import encrypt_message, decrypt_message
+from typing import List, Callable, Optional, Dict, Any
+from p3ai_agent.search import AgentSearchResponse
 
 # Configure logging with a more descriptive format
 logging.basicConfig(
@@ -34,7 +35,7 @@ class MQTTMessage:
         conversation_id: Optional[str] = None,
         in_reply_to: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
-    ):
+    ):  
         """
         Initialize a new MQTT message.
         
@@ -117,14 +118,21 @@ class AgentCommunicationManager:
     This class provides tools for LangChain agents to communicate via MQTT,
     enabling multi-agent collaboration through a publish-subscribe pattern.
     """
-    
+
+    identity_credential: dict = None
+    identity_credential_connected_agent: dict = None
+    secret_seed = None
+
     def __init__(
         self, 
         agent_id: str,
         default_inbox_topic: Optional[str] = None,
         default_outbox_topic: Optional[str] = None,
+        mqtt_broker_url: str = None,
         auto_reconnect: bool = True,
-        message_history_limit: int = 100
+        message_history_limit: int = 100,
+        identity_credential: dict = None,
+        secret_seed: str = None
     ):
         """
         Initialize the MQTT agent communication manager.
@@ -142,6 +150,9 @@ class AgentCommunicationManager:
         self.outbox_topic = default_outbox_topic or f"agents/collaboration"
         self.auto_reconnect = auto_reconnect
         self.message_history_limit = message_history_limit
+
+        self.identity_credential = identity_credential
+        self.secret_seed = secret_seed
         
 
         self.is_connected = False
@@ -158,31 +169,36 @@ class AgentCommunicationManager:
         self.mqtt_client.on_message = self._handle_message
         self.mqtt_client.on_disconnect = self._handle_disconnect
         
+        self.connect_to_broker(mqtt_broker_url)
+        self.subscribe_to_topic(f"{self.agent_id}/inbox")
+        print("Agent connected to broker")
+        print(f"Subscribed to {self.agent_id}/inbox")
+        
     
     def _handle_message(self, client, userdata, mqtt_message: MQTTMessage):
         """Handle incoming MQTT messages and process them appropriately."""
         try:
 
-            payload = mqtt_message.payload.decode('utf-8')
+            payload = json.loads(mqtt_message.payload.decode('utf-8'))
+            decrypt_payload = decrypt_message(payload, self.secret_seed, self.identity_credential)
             topic = mqtt_message.topic
             
             logger.info(f"[{self.agent_id}] Received message on topic '{topic}'")
             
 
             try:
-                message = MQTTMessage.from_json(payload)
+                message = MQTTMessage.from_json(decrypt_payload)
                 structured = True
             except Exception:
 
                 message = MQTTMessage(
-                    content=payload,
-                    sender_id="unknown",
+                    content=decrypt_payload,
+                    sender_id=self.identity_credential_connected_agent["issuer"],
                     receiver_id=self.agent_id,
                     message_type="raw"
                 )
                 structured = False
             
-
             message_with_metadata = {
                 "message": message,
                 "topic": topic,
@@ -190,6 +206,7 @@ class AgentCommunicationManager:
                 "structured": structured
             }
             
+            print("\nIncoming Message: ", message.content, "\n")
 
             self.received_messages.append(message_with_metadata)
             self.message_history.append(message_with_metadata)
@@ -199,12 +216,12 @@ class AgentCommunicationManager:
                 self.message_history = self.message_history[-self.message_history_limit:]
             
 
-            if self.agent_executor:
-                print("Preparing response...")
-                threading.Thread(
-                    target=self._generate_response,
-                    args=(message, topic)
-                ).start()
+            # if self.agent_executor:
+            #     print("Preparing response...")
+            #     threading.Thread(
+            #         target=self._generate_response,
+            #         args=(message, topic)
+            #     ).start()
                 
 
             for handler in self.message_handlers:
@@ -224,7 +241,7 @@ class AgentCommunicationManager:
             logger.info(f"[{self.agent_id}] Connected to MQTT broker successfully")
             
 
-            self._subscribe_to_topic(self.inbox_topic)
+            self.subscribe_to_topic(self.inbox_topic)
             logger.info(f"[{self.agent_id}] Listening for messages on {self.inbox_topic}")
             
 
@@ -347,9 +364,10 @@ class AgentCommunicationManager:
                 message_type=message_type
             )
             
-            # Convert to JSON and publish
+            # Convert to JSON, encrypt and publish
             json_payload = message.to_json()
-            result = self.mqtt_client.publish(self.outbox_topic, json_payload, qos=1)
+            encrypted_message = json.dumps(encrypt_message(json_payload, self.identity_credential_connected_agent))
+            result = self.mqtt_client.publish(self.outbox_topic, encrypted_message, qos=1)
             
             if result.rc == 0:
                 logger.info(f"[{self.agent_id}] Message sent to '{self.outbox_topic}'")
@@ -412,7 +430,7 @@ class AgentCommunicationManager:
         
         return output
     
-    def _subscribe_to_topic(self, topic_name: str) -> str:
+    def subscribe_to_topic(self, topic_name: str) -> str:
         """
         Subscribe to a specific MQTT topic.
         
@@ -437,7 +455,7 @@ class AgentCommunicationManager:
             logger.error(f"[{self.agent_id}] Error subscribing to topic: {e}")
             return f"Error subscribing to topic: {str(e)}"
     
-    def _unsubscribe_from_topic(self, topic_name: str) -> str:
+    def unsubscribe_from_topic(self, topic_name: str) -> str:
         """
         Unsubscribe from a specific MQTT topic.
         
@@ -467,7 +485,7 @@ class AgentCommunicationManager:
             logger.error(f"[{self.agent_id}] Error unsubscribing from topic: {e}")
             return f"Error unsubscribing from topic: {str(e)}"
     
-    def _change_outbox_topic(self, topic_name: str) -> str:
+    def change_outbox_topic(self, topic_name: str) -> str:
         """
         Change the default topic for outgoing messages.
         
@@ -532,3 +550,9 @@ class AgentCommunicationManager:
             history = history[-limit:]
             
         return history
+
+    def connect_agent(self, agent: AgentSearchResponse): 
+        self.connect_to_broker(agent["mqttUri"])
+        self.change_outbox_topic(f"{agent["didIdentifier"]}/inbox")
+        self.identity_credential_connected_agent = json.loads(agent["did"])
+

@@ -38,8 +38,8 @@ if __name__ == "__main__":
         message_history_limit=100,
         registry_url="http://localhost:3002",
         mqtt_broker_url="mqtt://registry.p3ai.network:1883",
-        identity_credential_path = "/Users/swapnilshinde/Desktop/p3ai/p3ai-agent/examples/identity_credential2.json",
-        secret_seed = os.environ["AGENT2_SEED"]
+        identity_credential_path = "/Users/swapnilshinde/Desktop/p3ai/p3ai-agent/examples/identity_credential1.json",
+        secret_seed = os.environ["AGENT1_SEED"]
     )
 
 
@@ -49,6 +49,12 @@ if __name__ == "__main__":
     # Created a langchain agent
     agent_executor = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+    def handle_incoming_message(client, userdata, msg):
+        message = p3_agent.decrypt_message(msg, p3_agent.secret_seed)
+        print(f"Message: {message}")
+
+    p3_agent.mqtt_client.on_message = handle_incoming_message
 
     p3_agent.set_agent_executor(agent_executor)
 

@@ -2,7 +2,7 @@
 import logging
 import requests
 
-from typing import List, Optional
+from typing import List, Optional, TypedDict
 
 
 logging.basicConfig(
@@ -11,6 +11,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("SearchAndDiscovery")
 
+class AgentSearchResponse(TypedDict):
+    id: str
+    name: str
+    description: str
+    mqttUri: Optional[str]
+    inboxTopic: Optional[str]
+    matchScore: int
+    didIdentifier: str
+    did: dict
 
 class SearchAndDiscoveryManager:
     """
@@ -24,7 +33,7 @@ class SearchAndDiscoveryManager:
         self.registry_url = registry_url
 
 
-    def search_agents_by_capabilities(self, capabilities: List[str] = [], match_score_gte: float = 0.5, top_k: Optional[int] = None) -> List[dict]:
+    def search_agents_by_capabilities(self, capabilities: List[str] = [], match_score_gte: float = 0.5, top_k: Optional[int] = None) -> List[AgentSearchResponse]:
         """
         Discover all registered agents in the system based on their capabilities.
 
