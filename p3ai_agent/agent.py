@@ -5,6 +5,7 @@ from p3ai_agent.identity import IdentityManager
 from p3ai_agent.communication import AgentCommunicationManager
 from pydantic import BaseModel
 from typing import Optional
+from langchain.agents import AgentExecutor
 
 class AgentConfig(BaseModel):
     auto_reconnect: bool = True
@@ -22,6 +23,7 @@ class P3AIAgent(SearchAndDiscoveryManager, IdentityManager, AgentCommunicationMa
 
         self.agent_executor = None
         self.agent_config = agent_config 
+        self.agent_executor: AgentExecutor = None
 
         try:
             with open(agent_config.identity_credential_path, "r") as f:
@@ -52,7 +54,7 @@ class P3AIAgent(SearchAndDiscoveryManager, IdentityManager, AgentCommunicationMa
 
 
 
-    def set_agent_executor(self, agent_executor):
+    def set_agent_executor(self, agent_executor: AgentExecutor):
         """Set the agent executor for the agent."""
         self.agent_executor = agent_executor 
 

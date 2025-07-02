@@ -173,6 +173,7 @@ class AgentCommunicationManager:
         self.mqtt_client.on_connect = self._handle_connect
         self.mqtt_client.on_message = self._handle_message
         self.mqtt_client.on_disconnect = self._handle_disconnect
+        self.mqtt_client.abstract_message_handler = None
         self.default_mqtt_broker_url = mqtt_broker_url
 
         self.connect_to_broker(mqtt_broker_url)
@@ -183,61 +184,52 @@ class AgentCommunicationManager:
     
     def _handle_message(self, client, userdata, mqtt_message: MQTTMessage):
         """Handle incoming MQTT messages and process them appropriately."""
-        # try:
+        try:
 
-        payload = json.loads(mqtt_message.payload.decode('utf-8'))
-        decrypt_payload = decrypt_message(payload, self.secret_seed, self.identity_credential)
-        topic = mqtt_message.topic
-        
-        logger.info(f"[{self.agent_id}] Received message on topic '{topic}'")
-        
+            payload = json.loads(mqtt_message.payload.decode('utf-8'))
+            decrypt_payload = decrypt_message(payload, self.secret_seed, self.identity_credential)
+            topic = mqtt_message.topic
+            
+            logger.info(f"[{self.agent_id}] Received message on topic '{topic}'")
+            
+            message = MQTTMessage.from_json(decrypt_payload)
 
+            if not self.is_agent_connected:
+                self.connect_agent({
+                    "mqttUri": self.default_mqtt_broker_url,
+                    "didIdentifier": message.sender_id,
+                    "did": json.dumps(message.sender_did)
+                })
 
-        message = MQTTMessage.from_json(decrypt_payload)
+            structured = True
 
-        if not self.is_agent_connected:
-            self.connect_agent({
-                "mqttUri": self.default_mqtt_broker_url,
-                "didIdentifier": message.sender_id,
-                "did": json.dumps(message.sender_did)
-            })
+            message_with_metadata = {
+                "message": message,
+                "topic": topic,
+                "received_at": time.time(),
+                "structured": structured
+            }
+            
+            print("\nIncoming Message: ", message.content, "\n")
 
-        structured = True
-
-        message_with_metadata = {
-            "message": message,
-            "topic": topic,
-            "received_at": time.time(),
-            "structured": structured
-        }
-        
-        print("\nIncoming Message: ", message.content, "\n")
-
-        self.received_messages.append(message_with_metadata)
-        self.message_history.append(message_with_metadata)
-        
-
-        if len(self.message_history) > self.message_history_limit:
-            self.message_history = self.message_history[-self.message_history_limit:]
-        
-
-        # if self.agent_executor:
-        #     print("Preparing response...")
-        #     threading.Thread(
-        #         target=self._generate_response,
-        #         args=(message, topic)
-        #     ).start()
+            self.received_messages.append(message_with_metadata)
+            self.message_history.append(message_with_metadata)
             
 
-        for handler in self.message_handlers:
-            try:
-                handler(message, topic)
-            except Exception as e:
-                logger.error(f"Error in custom message handler: {e}")
-                    
-        # except Exception as e:
-        #     logger.error(f"Error processing incoming message: {e}")
+            if len(self.message_history) > self.message_history_limit:
+                self.message_history = self.message_history[-self.message_history_limit:]
 
+            for handler in self.message_handlers:
+                try:
+                    handler(message, topic)
+                except Exception as e:
+                    logger.error(f"Error in custom message handler: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error processing incoming message: {e}")
+
+    def register_handler(self, handler_fn: Callable[[MQTTMessage, str], None]):
+        self.message_handlers.append(handler_fn)
 
     def _handle_connect(self, client, userdata, flags, rc):
         """Handle successful connection to MQTT broker."""

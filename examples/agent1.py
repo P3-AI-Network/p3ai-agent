@@ -1,8 +1,10 @@
 from p3ai_agent.agent import AgentConfig, P3AIAgent
+from p3ai_agent.communication import MQTTMessage
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain.agents import initialize_agent, AgentType
+from langchain.tools.tavily_search import TavilySearchResults
+
 from dotenv import load_dotenv
 import os
 from time import sleep
@@ -36,7 +38,7 @@ if __name__ == "__main__":
         default_outbox_topic=None,
         auto_reconnect=True,
         message_history_limit=100,
-        registry_url="http://localhost:3002",
+        registry_url="https://registry.p3ai.network",
         mqtt_broker_url="mqtt://registry.p3ai.network:1883",
         identity_credential_path = "/Users/swapnilshinde/Desktop/p3ai/p3ai-agent/examples/identity_credential1.json",
         secret_seed = os.environ["AGENT1_SEED"]
@@ -47,45 +49,37 @@ if __name__ == "__main__":
     p3_agent = P3AIAgent(agent_config=agent_config)
     
     # Created a langchain agent
-    agent_executor = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
+    search_tool = TavilySearchResults(max_results=3)
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    system_prompt = """You are a helpful AI agent. Use search when the user asks anything about current events, facts, or the web."""
+    agent_executor = initialize_agent(
+        tools=[search_tool],
+        llm=llm,
+        agent=AgentType.OPENAI_FUNCTIONS,  # Supports tool calling
+        memory=memory,
+        verbose=True,
+        handle_parsing_errors=True,
+        agent_kwargs={"system_message": system_prompt}
+    )
 
     p3_agent.set_agent_executor(agent_executor)
 
 
+    def message_handler(message: MQTTMessage, topic: str):
+        agent_response = p3_agent.agent_executor.invoke({"input": message.content})
+        agent_output = agent_response["output"]
+        p3_agent.send_message(agent_output)
+
+    p3_agent.add_message_handler(message_handler)
+
+
     # Main loop
     while True:
-        search_filter = input("Search Agent: ")
-        agents = p3_agent.search_agents_by_capabilities([search_filter])
+        message = input("Message (Exit for exit): ")
 
-        print("Agents Found")
-        for agent in agents:
-            print(f"""
-                DID: {agent["didIdentifier"]}
-                Description: {agent["description"]}
-                Match Score: {agent["matchScore"]}
-            """)
-            print("================")
+        if message == "Exit":
+            break
         
-        agent_select = input("Connect to agent DID: ")
-
-        selected_agent = None
-        for agent in agents:
-            if agent["didIdentifier"] == agent_select:
-                selected_agent = agent
-        
-        if not selected_agent:
-            raise "Invalid did agent not found"
-        
-        p3_agent.connect_agent(selected_agent)
-
-        print("Connected to agent")
-
-        while True:
-            message = input("Message (Exit for exit): ")
-
-            if message == "Exit":
-                break
-            
-            p3_agent.send_message(message)
-        
+        p3_agent.send_message(message)
+    
