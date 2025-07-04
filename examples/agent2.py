@@ -38,7 +38,7 @@ if __name__ == "__main__":
         message_history_limit=100,
         registry_url="https://registry.p3ai.network",
         mqtt_broker_url="mqtt://registry.p3ai.network:1883",
-        identity_credential_path = "/Users/swapnilshinde/Desktop/p3ai/p3ai-agent/examples/identity_credential2.json",
+        identity_credential_path = "examples/identity/identity_credential2.json",
         secret_seed = os.environ["AGENT2_SEED"]
     )
 
